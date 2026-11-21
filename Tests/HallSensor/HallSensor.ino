@@ -1,26 +1,47 @@
-// 02_hall_test — find how the sensor reacts to our magnet
+// 02b_dock_detect — onboard LED shows "strap docked"
 #define HALL_PIN 34
+#define LED_PIN  2
 
-int baseline = 0;
+const int DOCK_ON   = 250;   // above this = docked
+const int DOCK_OFF  = 120;   // below this = removed
+const unsigned long HOLD_MS = 300;
+
+int  baseline = 0;
+bool docked = false;
+unsigned long changeStart = 0;
+
+int readHall() {
+  long sum = 0;
+  for (int i = 0; i < 20; i++) sum += analogRead(HALL_PIN);
+  return sum / 20;
+}
 
 void setup() {
   Serial.begin(115200);
+  pinMode(LED_PIN, OUTPUT);
   delay(500);
-  Serial.println("Keep the magnet AWAY. Measuring baseline...");
-  long sum = 0;
-  for (int i = 0; i < 100; i++) { sum += analogRead(HALL_PIN); delay(10); }
-  baseline = sum / 100;
+  long sum = 0;                                  // keep strap AWAY at power-on
+  for (int i = 0; i < 50; i++) { sum += readHall(); delay(10); }
+  baseline = sum / 50;
   Serial.print("Baseline: "); Serial.println(baseline);
-  Serial.println("Now bring the magnet closer slowly.");
 }
 
 void loop() {
-  long sum = 0;
-  for (int i = 0; i < 20; i++) sum += analogRead(HALL_PIN);   // smooth out noise
-  int raw = sum / 20;
-  int diff = raw - baseline;
+  int strength = abs(readHall() - baseline);     // abs = either magnet side works
+  bool wantDocked = docked ? (strength > DOCK_OFF) : (strength > DOCK_ON);
 
-  Serial.print("raw: ");    Serial.print(raw);
-  Serial.print("   diff: "); Serial.println(diff);
-  delay(150);
+  if (wantDocked != docked) {
+    if (changeStart == 0) changeStart = millis();
+    if (millis() - changeStart > HOLD_MS) {
+      docked = wantDocked;
+      changeStart = 0;
+      Serial.println(docked ? ">>> STRAP DOCKED" : "<<< STRAP REMOVED");
+      digitalWrite(LED_PIN, docked ? HIGH : LOW);
+    }
+  } else {
+    changeStart = 0;
+  }
+
+  Serial.print("strength: "); Serial.println(strength);
+  delay(50);
 }
